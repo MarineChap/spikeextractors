@@ -23,10 +23,10 @@ class PhyRecordingExtractor(BinDatRecordingExtractor):
 
         if (phy_folder / 'channel_map_si.npy').is_file():
             channel_map = list(np.squeeze(np.load(phy_folder / 'channel_map_si.npy')))
-            assert len(channel_map) == self.params['n_channels_dat']
+            assert max(channel_map) < self.params['n_channels_dat'], "Channel map inconsistent with dat file."
         elif (phy_folder / 'channel_map.npy').is_file():
             channel_map = list(np.squeeze(np.load(phy_folder / 'channel_map.npy')))
-            assert len(channel_map) == self.params['n_channels_dat']
+            assert max(channel_map) < self.params['n_channels_dat'], "Channel map inconsistent with dat file."
         else:
             channel_map = list(range(self.params['n_channels_dat']))
 
@@ -85,42 +85,28 @@ class PhySortingExtractor(SortingExtractor):
         # set unit quality properties
         csv_tsv_files = [x for x in phy_folder.iterdir() if x.suffix == '.csv' or x.suffix == '.tsv']
         for f in csv_tsv_files:
-            if f.suffix == '.csv':
-                with f.open() as csv_file:
+            with f.open() as csv_file:
+                if f.suffix == '.csv':
+                    # .csv
                     csv_reader = csv.reader(csv_file, delimiter=',')
-                    line_count = 0
-                    for row in csv_reader:
-                        if line_count == 0:
-                            tokens = row[0].split("\t")
-                            property_name = tokens[1]
-                        else:
-                            tokens = row[0].split("\t")
-                            if int(tokens[0]) in self.get_unit_ids():
-                                if 'cluster_group' in str(f):
-                                    self.set_unit_property(int(tokens[0]), 'quality', tokens[1])
-                                elif property_name == 'chan_grp':
-                                    self.set_unit_property(int(tokens[0]), 'group', tokens[1])
-                                else:
-                                    if isinstance(tokens[1], (int, np.int, float, np.float, str)):
-                                        self.set_unit_property(int(tokens[0]), property_name, tokens[1])
-                            line_count += 1
-            elif f.suffix == '.tsv':
-                with f.open() as csv_file:
+                else:
+                    # .tsv
                     csv_reader = csv.reader(csv_file, delimiter='\t')
-                    line_count = 0
-                    for row in csv_reader:
-                        if line_count == 0:
-                            property_name = row[1]
-                        else:
-                            if len(row) == 2:
-                                if int(row[0]) in self.get_unit_ids():
-                                    if 'cluster_group' in str(f):
-                                        self.set_unit_property(int(row[0]), 'quality', row[1])
-                                    elif property_name == 'chan_grp':
-                                        self.set_unit_property(int(row[0]), 'group', row[1])
-                                    else:
-                                        if isinstance(row[1], (int, np.int, float, np.float, str)) and len(row) == 2:
-                                            self.set_unit_property(int(row[0]), property_name, row[1])
+                line_count = 0
+                for row in csv_reader:
+                    if line_count == 0:
+                        tokens = row[0].split("\t")
+                        property_name = tokens[1]
+                    else:
+                        tokens = row[0].split("\t")
+                        if int(tokens[0]) in self.get_unit_ids():
+                            if 'cluster_group' in str(f):
+                                self.set_unit_property(int(tokens[0]), 'quality', tokens[1])
+                            elif property_name == 'chan_grp':
+                                self.set_unit_property(int(tokens[0]), 'group', tokens[1])
+                            else:
+                                if isinstance(tokens[1], (int, np.int, float, np.float, str)):
+                                    self.set_unit_property(int(tokens[0]), property_name, tokens[1])
                         line_count += 1
 
         for unit in self.get_unit_ids():

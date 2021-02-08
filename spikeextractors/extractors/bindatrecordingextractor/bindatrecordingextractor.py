@@ -34,11 +34,18 @@ class BinDatRecordingExtractor(RecordingExtractor):
             self.is_filtered = False
 
         if recording_channels is not None:
-            assert len(recording_channels) == self._timeseries.shape[0], \
-               'Provided recording channels have the wrong length'
+            assert len(recording_channels) <= self._timeseries.shape[0], \
+                'Provided recording channels have the wrong length'
             self._channels = recording_channels
         else:
             self._channels = list(range(self._timeseries.shape[0]))
+
+        if len(self._channels) == self._timeseries.shape[0]:
+            self._complete_channels = True
+        else:
+            assert max(self._channels) < self._timeseries.shape[0], "Channel ids exceed the number of " \
+                                                                    "available channels"
+            self._complete_channels = False
 
         if geom is not None:
             self.set_channel_locations(self._geom)
@@ -64,21 +71,27 @@ class BinDatRecordingExtractor(RecordingExtractor):
 
     @check_get_traces_args
     def get_traces(self, channel_ids=None, start_frame=None, end_frame=None):
-        if np.all(channel_ids == self.get_channel_ids()):
-            recordings = self._timeseries[:, start_frame:end_frame]
-        else:
-            channel_idxs = np.array([self.get_channel_ids().index(ch) for ch in channel_ids])
-            if np.all(np.diff(channel_idxs) == 1):
-                recordings = self._timeseries[channel_idxs[0]:channel_idxs[0]+len(channel_idxs), start_frame:end_frame]
+        if self._complete_channels:
+            if np.all(channel_ids == self.get_channel_ids()):
+                recordings = self._timeseries[:, start_frame:end_frame]
             else:
-                # This block of the execution will return the data as an array, not a memmap
-                recordings = self._timeseries[channel_idxs, start_frame:end_frame]
+                channel_idxs = np.array([self.get_channel_ids().index(ch) for ch in channel_ids])
+                if np.all(np.diff(channel_idxs) == 1):
+                    recordings = self._timeseries[channel_idxs[0]:channel_idxs[0] + len(channel_idxs),
+                                 start_frame:end_frame]
+                else:
+                    # This block of the execution will return the data as an array, not a memmap
+                    recordings = self._timeseries[channel_idxs, start_frame:end_frame]
+        else:
+            recordings = self._timeseries[channel_ids, start_frame:end_frame]
+
         if self._dtype.startswith('uint'):
             exp_idx = self._dtype.find('int') + 3
             exp = int(self._dtype[exp_idx:])
-            recordings = recordings.astype('float32') - 2**(exp - 1)
+            recordings = recordings.astype('float32') - 2 ** (exp - 1)
         if self._gain is not None:
             recordings = recordings * self._gain
+
         return recordings
 
     def write_to_binary_dat_format(self, save_path, time_axis=0, dtype=None, chunk_size=None, chunk_mb=500,
@@ -118,7 +131,6 @@ class BinDatRecordingExtractor(RecordingExtractor):
             write_to_binary_dat_format(self, save_path=save_path, time_axis=time_axis, dtype=dtype,
                                        chunk_size=chunk_size, chunk_mb=chunk_mb, n_jobs=n_jobs,
                                        joblib_backend=joblib_backend)
-
 
     @staticmethod
     def write_recording(recording, save_path, time_axis=0, dtype=None, chunk_size=None):
